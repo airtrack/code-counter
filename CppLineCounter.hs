@@ -1,9 +1,10 @@
 import qualified Data.ByteString.Char8 as C
 import System.Environment (getArgs, getProgName)
-import System.Directory (doesDirectoryExist, getDirectoryContents)
+import System.Directory (doesFileExist, doesDirectoryExist, getDirectoryContents)
 import System.FilePath ((</>))
 import Data.Char (isSpace)
 import Control.Monad (forM)
+import Control.Arrow (first)
 import Data.List (isSuffixOf)
 
 data Counter = Counter {
@@ -14,7 +15,7 @@ data Counter = Counter {
 
     isCodeLine :: Bool,
     isBlankLine :: Bool,
-    lexComment :: Bool,
+    lexingComment :: Bool,
     isMultiLineComment :: Bool
 } deriving(Eq)
 
@@ -28,7 +29,8 @@ instance Show Counter where
 emptyCounter :: Counter
 emptyCounter = Counter {
     codeLine = 0, commentLine = 0, blankLine = 0, totalLine = 0,
-    isCodeLine = False, isBlankLine = True, lexComment = False, isMultiLineComment = False
+    isCodeLine = False, isBlankLine = True,
+    lexingComment = False, isMultiLineComment = False
 }
 
 plusCounter :: Counter -> Counter -> Counter
@@ -43,7 +45,7 @@ incCommentLine :: Counter -> Counter
 incCommentLine counter =
     if isMultiLineComment counter
     then counter { commentLine = (commentLine counter) + 1 }
-    else counter { lexComment = False }
+    else counter { lexingComment = False }
 
 incBlankLine :: Counter -> Counter
 incBlankLine counter =
@@ -65,51 +67,56 @@ incLine counter = incCommentLine $ incBlankLine $ incCodeLine $ incTotalLine cou
 
 startComment :: Counter -> Bool -> Counter
 startComment counter multiLine = 
-    if lexComment counter
+    if lexingComment counter
     then counter
     else counter {
-        lexComment = True, isMultiLineComment = multiLine, commentLine = (commentLine counter) + 1
+        lexingComment = True, isMultiLineComment = multiLine,
+        commentLine = (commentLine counter) + 1
     }
 
-endComment :: Counter -> Counter
-endComment counter = counter {
-    lexComment = False, isMultiLineComment = False
-}
+endMultiLineComment :: Counter -> Counter
+endMultiLineComment counter =
+    if isMultiLineComment counter
+    then counter { lexingComment = False, isMultiLineComment = False }
+    else counter
 
-countLine :: String -> Counter -> Counter
+notBlankLine :: Counter -> Counter
+notBlankLine counter = counter { isBlankLine = False }
 
--- count new line
-countLine ('\n':xs) counter =
+takeTwo :: String -> C.ByteString -> (String, C.ByteString)
+takeTwo s@(_:[]) bs = first ((s ++ ) . C.unpack) $ C.splitAt 1 bs
+takeTwo [] bs = first C.unpack $ C.splitAt 2 bs
+
+countLine :: (String, C.ByteString) -> Counter -> Counter
+countLine (('\n':xs), bs) counter =
     case xs of
-        ('\r':xs') -> countLine xs' (incLine counter)
-        otherwise -> countLine xs (incLine counter)
+        ('\r':ys) -> countLine (takeTwo ys bs) $ incLine counter
+        otherwise -> countLine (takeTwo xs bs) $ incLine counter
 
-countLine ('\r':xs) counter =
+countLine (('\r':xs), bs) counter =
     case xs of
-        ('\n':xs') -> countLine xs' (incLine counter)
-        otherwise -> countLine xs (incLine counter)
+        ('\n':ys) -> countLine (takeTwo ys bs) $ incLine counter
+        otherwise -> countLine (takeTwo xs bs) $ incLine counter
 
--- count comment
-countLine ('/':xs) counter =
+countLine (('/':xs), bs) counter =
     case xs of
-        ('/':xs') -> countLine xs' (startComment counter { isBlankLine = False } False)
-        ('*':xs'') -> countLine xs'' (startComment counter { isBlankLine = False } True)
-        otherwise -> countLine xs counter { isBlankLine = False }
+        ('/':ys) -> countLine (takeTwo ys bs) $ startComment (notBlankLine counter) False
+        ('*':ys) -> countLine (takeTwo ys bs) $ startComment (notBlankLine counter) True
+        otherwise -> countLine (takeTwo xs bs) $ notBlankLine counter
 
-countLine ('*':xs) counter =
+countLine (('*':xs), bs) counter =
     case xs of
-        ('/':xs') -> countLine xs' (endComment counter { isBlankLine = False })
-        otherwise -> countLine xs counter { isBlankLine = False }
+        ('/':ys) -> countLine (takeTwo ys bs) $ endMultiLineComment $ notBlankLine counter
+        otherwise -> countLine (takeTwo xs bs) $ notBlankLine counter
 
--- count other
-countLine (c:xs) counter =
-    if lexComment counter
-    then countLine xs counter { isBlankLine = False }
+countLine ((c:xs), bs) counter =
+    if lexingComment counter
+    then countLine (takeTwo xs bs) $ notBlankLine counter
     else if isSpace c
-         then countLine xs counter
-         else countLine xs counter { isCodeLine = True, isBlankLine = False }
+         then countLine (takeTwo xs bs) counter
+         else countLine (takeTwo xs bs) $ notBlankLine counter { isCodeLine = True }
 
-countLine [] counter = counter
+countLine ([], bs) counter = incLine counter
 
 cppFileExt :: [String]
 cppFileExt = [".c", ".C", ".cpp", ".CPP", ".cc", ".CC", ".cxx", ".CXX", ".h", ".hpp", "hxx"]
@@ -132,13 +139,39 @@ getAllCppFiles dir = do
              else return []
     return (concat paths)
 
-count :: FilePath -> IO ()
-count dir = do
-    files <- getAllCppFiles dir
+getFiles :: FilePath -> IO [FilePath]
+getFiles path = do
+    isFile <- doesFileExist path
+    isDir <- doesDirectoryExist path
+    if isFile
+    then return [path]
+    else if isDir
+         then getAllCppFiles path
+         else return []
+
+isPathExist :: FilePath -> IO Bool
+isPathExist path = do
+    isFile <- doesFileExist path
+    if isFile
+    then return True
+    else doesDirectoryExist path
+
+countAll :: FilePath -> IO ()
+countAll path = do
+    files <- getFiles path
     counters <- forM files $ \file -> do
         context <- C.readFile file
-        return (countLine (C.unpack context) emptyCounter)
+        if C.null context
+        then return emptyCounter
+        else return (countLine (takeTwo [] context) emptyCounter)
     printCounter $ foldr plusCounter emptyCounter counters
+
+count :: FilePath -> IO ()
+count path = do
+    isExist <- isPathExist path
+    if isExist
+    then countAll path
+    else putStrLn $ path ++ " is not exist"
 
 main :: IO ()
 main = do
