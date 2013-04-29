@@ -27,11 +27,7 @@ instance Show Counter where
         "\ntotal: " ++ show total
 
 emptyCounter :: Counter
-emptyCounter = Counter {
-    codeLine = 0, commentLine = 0, blankLine = 0, totalLine = 0,
-    isCodeLine = False, isBlankLine = True,
-    lexingComment = False, isMultiLineComment = False
-}
+emptyCounter = Counter 0 0 0 0 False True False False
 
 plusCounter :: Counter -> Counter -> Counter
 plusCounter c1 c2 = emptyCounter {
