@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 import qualified Data.ByteString.Char8 as C
 import System.Environment (getArgs, getProgName)
 import System.Directory (doesFileExist, doesDirectoryExist, getDirectoryContents)
@@ -5,18 +7,18 @@ import System.FilePath ((</>))
 import Data.Char (isSpace)
 import Control.Monad (forM)
 import Control.Arrow (first)
-import Data.List (isSuffixOf)
+import Data.List (isSuffixOf, foldl')
 
 data Counter = Counter {
-    codeLine :: Int,
-    commentLine :: Int,
-    blankLine :: Int,
-    totalLine :: Int,
+    codeLine :: !Int,
+    commentLine :: !Int,
+    blankLine :: !Int,
+    totalLine :: !Int,
 
-    isCodeLine :: Bool,
-    isBlankLine :: Bool,
-    lexingComment :: Bool,
-    isMultiLineComment :: Bool
+    isCodeLine :: !Bool,
+    isBlankLine :: !Bool,
+    lexingComment :: !Bool,
+    isMultiLineComment :: !Bool
 } deriving(Eq)
 
 instance Show Counter where
@@ -126,14 +128,14 @@ getAllCppFiles dir = do
     names <- getDirectoryContents dir
     let files = filter (`notElem` [".", ".."]) names
     paths <- forM files $ \name -> do
-        let path = dir </> name
+        let !path = dir </> name
         isDir <- doesDirectoryExist path
         if isDir
         then getAllCppFiles path
         else if any (`isSuffixOf` path) cppFileExt
              then return [path]
              else return []
-    return (concat paths)
+    return $! concat paths
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles path = do
@@ -159,8 +161,8 @@ countAll path = do
         context <- C.readFile file
         if C.null context
         then return emptyCounter
-        else return (countLine (takeTwo [] context) emptyCounter)
-    printCounter $ foldr plusCounter emptyCounter counters
+        else return $! countLine (takeTwo [] context) emptyCounter
+    printCounter $ foldl' plusCounter emptyCounter counters
 
 count :: FilePath -> IO ()
 count path = do

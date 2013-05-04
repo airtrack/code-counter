@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 import qualified Data.ByteString.Char8 as B
@@ -5,18 +6,18 @@ import System.Environment (getArgs, getProgName)
 import System.Directory (doesFileExist, doesDirectoryExist, getDirectoryContents)
 import System.FilePath ((</>))
 import Data.Char (isSpace)
-import Data.List (isSuffixOf)
+import Data.List (isSuffixOf, foldl')
 import Control.Monad (forM)
 import Control.Monad.State
 
 data Context = Context {
-    line :: Int,
-    code :: Int,
-    comment :: Int,
-    blank :: Int,
-    lexingComment :: Bool,
-    isMultiLineComment :: Bool,
-    isCodeLine :: Bool
+    line :: !Int,
+    code :: !Int,
+    comment :: !Int,
+    blank :: !Int,
+    lexingComment :: !Bool,
+    isMultiLineComment :: !Bool,
+    isCodeLine :: !Bool
 } deriving (Eq)
 
 instance Show Context where
@@ -207,14 +208,14 @@ getAllCppFiles dir = do
     names <- getDirectoryContents dir
     let files = filter (`notElem` [".", ".."]) names
     paths <- forM files $ \name -> do
-        let path = dir </> name
+        let !path = dir </> name
         isDir <- doesDirectoryExist path
         if isDir
         then getAllCppFiles path
         else if any (`isSuffixOf` path) cppFileExt
              then return [path]
              else return []
-    return (concat paths)
+    return $! concat paths
 
 getFiles :: FilePath -> IO [FilePath]
 getFiles path = do
@@ -242,8 +243,8 @@ countAll path = do
     files <- getFiles path
     contexts <- forM files $ \file -> do
         bs <- B.readFile file
-        return $ countFile bs
-    printContext $ foldr plusContext emptyContext contexts
+        return $! countFile bs
+    printContext $ foldl' plusContext emptyContext contexts
 
 count :: FilePath -> IO ()
 count path = do
