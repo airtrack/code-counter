@@ -201,7 +201,7 @@ file = repeatP $ spaceLine <||> normalLine
 countFile bs = snd . snd $ runParse file bs
 
 cppFileExt :: [String]
-cppFileExt = [".c", ".C", ".cpp", ".CPP", ".cc", ".CC", ".cxx", ".CXX", ".h", ".hpp", "hxx"]
+cppFileExt = [".c", ".C", ".cpp", ".CPP", ".cc", ".CC", ".cxx", ".CXX", ".h", ".hpp", ".hxx"]
 
 getAllCppFiles :: FilePath -> IO [FilePath]
 getAllCppFiles dir = do

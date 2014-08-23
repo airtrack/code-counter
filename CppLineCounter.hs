@@ -117,7 +117,7 @@ countLine ((c:xs), bs) counter =
 countLine ([], bs) counter = incLine counter
 
 cppFileExt :: [String]
-cppFileExt = [".c", ".C", ".cpp", ".CPP", ".cc", ".CC", ".cxx", ".CXX", ".h", ".hpp", "hxx"]
+cppFileExt = [".c", ".C", ".cpp", ".CPP", ".cc", ".CC", ".cxx", ".CXX", ".h", ".hpp", ".hxx"]
 
 printCounter :: Counter -> IO ()
 printCounter counter = do
